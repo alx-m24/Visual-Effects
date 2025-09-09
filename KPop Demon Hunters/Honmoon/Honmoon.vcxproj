@@ -144,10 +144,14 @@
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Algorithm.md">
+      <SubType>
+      </SubType>
+    </None>
     <None Include="src\Shaders\Basic.frag" />
     <None Include="src\Shaders\Basic.vert" />
-    <None Include="src\Shaders\Lines.frag" />
-    <None Include="src\Shaders\Lines.vert" />
+    <None Include="src\Shaders\Honmoon.frag" />
+    <None Include="src\Shaders\Honmoon.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Headers\Camera.hpp" />

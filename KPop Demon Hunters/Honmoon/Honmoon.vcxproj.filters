@@ -77,10 +77,11 @@
     <None Include="src\Shaders\Basic.vert">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="src\Shaders\Lines.frag">
+    <None Include="Algorithm.md" />
+    <None Include="src\Shaders\Honmoon.frag">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="src\Shaders\Lines.vert">
+    <None Include="src\Shaders\Honmoon.vert">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>

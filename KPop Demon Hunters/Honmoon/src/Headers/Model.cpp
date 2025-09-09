@@ -51,12 +51,14 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
     for (unsigned int i = 0; i < mesh->mNumVertices; i++)
     {
         Vertex vertex{};
-        glm::vec3 vector{}; // we declare a placeholder vector since assimp uses its own vector class that doesn't directly convert to glm's vec3 class so we transfer the data to this placeholder glm::vec3 first.
+        glm::vec3 vector{};
+
         // positions
         vector.x = mesh->mVertices[i].x;
         vector.y = mesh->mVertices[i].y;
         vector.z = mesh->mVertices[i].z;
         vertex.Position = vector;
+
         // normals
         if (mesh->HasNormals())
         {
@@ -65,8 +67,9 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
             vector.z = mesh->mNormals[i].z;
             vertex.Normal = vector;
         }
+
         // texture coordinates
-        if (mesh->mTextureCoords[0]) // does the mesh contain texture coordinates?
+        if (mesh->mTextureCoords[0])
         {
             glm::vec2 vec{};
             vec.x = mesh->mTextureCoords[0][i].x;
@@ -75,8 +78,80 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
         }
         else vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 
+        // copy Assimp tangents/bitangents if available
+        if (mesh->HasTangentsAndBitangents()) {
+            vector.x = mesh->mTangents[i].x;
+            vector.y = mesh->mTangents[i].y;
+            vector.z = mesh->mTangents[i].z;
+            vertex.Tangent = vector;
+
+            vector.x = mesh->mBitangents[i].x;
+            vector.y = mesh->mBitangents[i].y;
+            vector.z = mesh->mBitangents[i].z;
+            vertex.Bitangent = vector;
+        }
+        else {
+            vertex.Tangent = glm::vec3(0.0f);
+            vertex.Bitangent = glm::vec3(0.0f);
+        }
+
         vertices.push_back(vertex);
     }
+
+    // process faces / indices
+    for (unsigned int i = 0; i < mesh->mNumFaces; i++)
+    {
+        aiFace face = mesh->mFaces[i];
+        for (unsigned int j = 0; j < face.mNumIndices; j++)
+            indices.push_back(face.mIndices[j]);
+    }
+
+    // compute tangents/bitangents manually if Assimp didn't provide them
+    if (!mesh->HasTangentsAndBitangents()) {
+        for (unsigned int i = 0; i < indices.size(); i += 3)
+        {
+            Vertex& v0 = vertices[indices[i + 0]];
+            Vertex& v1 = vertices[indices[i + 1]];
+            Vertex& v2 = vertices[indices[i + 2]];
+
+            glm::vec3 pos1 = v0.Position;
+            glm::vec3 pos2 = v1.Position;
+            glm::vec3 pos3 = v2.Position;
+
+            glm::vec2 uv1 = v0.TexCoords;
+            glm::vec2 uv2 = v1.TexCoords;
+            glm::vec2 uv3 = v2.TexCoords;
+
+            glm::vec3 edge1 = pos2 - pos1;
+            glm::vec3 edge2 = pos3 - pos1;
+            glm::vec2 deltaUV1 = uv2 - uv1;
+            glm::vec2 deltaUV2 = uv3 - uv1;
+
+            float f = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+            if (fabs(f) < 1e-6f) f = 1.0f; // avoid division by zero
+            else f = 1.0f / f;
+
+            glm::vec3 tangent, bitangent;
+            tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+            tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+            tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+
+            bitangent.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
+            bitangent.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
+            bitangent.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
+
+            v0.Tangent += tangent; v1.Tangent += tangent; v2.Tangent += tangent;
+            v0.Bitangent += bitangent; v1.Bitangent += bitangent; v2.Bitangent += bitangent;
+        }
+
+        // normalize tangents/bitangents per vertex
+        for (auto& v : vertices) {
+            v.Tangent = glm::normalize(v.Tangent);
+            v.Bitangent = glm::normalize(v.Bitangent);
+        }
+    }
+
+
     // now wak through each of the mesh's faces (a face is a mesh its triangle) and retrieve the corresponding vertex indices.
     for (unsigned int i = 0; i < mesh->mNumFaces; i++)
     {
@@ -85,6 +160,8 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
         for (unsigned int j = 0; j < face.mNumIndices; j++)
             indices.push_back(face.mIndices[j]);
     }
+
+
     // process materials
     aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
 
@@ -95,10 +172,10 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
     std::vector<Texture> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
     textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
     // 3. normal maps
-    std::vector<Texture> normalMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_normal");
+    std::vector<Texture> normalMaps = loadMaterialTextures(material, aiTextureType_NORMALS, "texture_normal");
     textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
-    // 4. height maps
-    std::vector<Texture> heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
+    // 4. height/displacement maps
+    std::vector<Texture> heightMaps = loadMaterialTextures(material, aiTextureType_DISPLACEMENT, "texture_height");
     textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
 
     // return a mesh object created from the extracted mesh data

@@ -82,7 +82,7 @@ int main() {
 	std::string shaderPath = currentPath + "\\src\\Shaders\\";
 
 	Shader basicShader(shaderPath + "Basic.vert", shaderPath + "Basic.frag");
-	Shader lineShader(shaderPath + "Lines.vert", shaderPath + "Lines.frag");
+	Shader honmoonShader(shaderPath + "Honmoon.vert", shaderPath + "Honmoon.frag");
 #pragma endregion
 
 #pragma region Models
@@ -104,14 +104,14 @@ int main() {
 	unsigned int gBuffer;
 	glGenFramebuffers(1, &gBuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-	unsigned int gPosition, gNormal, gAlbedoSpec;
+	unsigned int gPosition, gNormal, gColor;
 	// position color buffer
 	glGenTextures(1, &gPosition);
 	glBindTexture(GL_TEXTURE_2D, gPosition);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gPosition, 0);
 	// normal color buffer
 	glGenTextures(1, &gNormal);
 	glBindTexture(GL_TEXTURE_2D, gNormal);
@@ -120,12 +120,12 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
 	// color + specular color buffer
-	glGenTextures(1, &gAlbedoSpec);
-	glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+	glGenTextures(1, &gColor);
+	glBindTexture(GL_TEXTURE_2D, gColor);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedoSpec, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gColor, 0);
 	// tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
 	unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
 	glDrawBuffers(3, attachments);
@@ -139,6 +139,77 @@ int main() {
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		std::cout << "Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#pragma endregion
+
+#pragma region Honmoon
+	struct HonmoonVertex {
+		glm::vec2 texCoords;
+	};
+
+	std::vector<HonmoonVertex> Honmoon_vertices;
+	std::vector<GLuint> indices;
+	int width = SCR_WIDTH;
+	int height = SCR_HEIGHT;
+
+	// downscaling factor: 1 = full res, 2 = half res, 4 = quarter res, etc.
+	int resolution = 1;
+
+	int meshWidth = (width + resolution - 1) / resolution;  // ceil division
+	int meshHeight = (height + resolution - 1) / resolution;
+
+	// Generate vertices
+	for (int y = 0; y < height; y += resolution) {
+		for (int x = 0; x < width; x += resolution) {
+			glm::vec2 texCoord = glm::vec2(
+				static_cast<float>(x) / (width - 1),
+				static_cast<float>(y) / (height - 1)
+			);
+			Honmoon_vertices.push_back({ texCoord });
+		}
+	}
+
+	// Generate indices for triangles
+	for (int y = 0; y < meshHeight - 1; y++) {
+		for (int x = 0; x < meshWidth - 1; x++) {
+			int i0 = y * meshWidth + x;
+			int i1 = i0 + 1;
+			int i2 = i0 + meshWidth;
+			int i3 = i2 + 1;
+
+			// two triangles per quad
+			indices.push_back(i0);
+			indices.push_back(i2);
+			indices.push_back(i1);
+
+			indices.push_back(i1);
+			indices.push_back(i2);
+			indices.push_back(i3);
+		}
+	}
+
+
+	GLuint Honmoon_VAO, Honmoon_VBO, Honmoon_EBO;
+	glGenVertexArrays(1, &Honmoon_VAO);
+	glGenBuffers(1, &Honmoon_VBO);
+	glGenBuffers(1, &Honmoon_EBO);
+
+	glBindVertexArray(Honmoon_VAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, Honmoon_VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(HonmoonVertex) * Honmoon_vertices.size(), Honmoon_vertices.data(), GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Honmoon_EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint)* indices.size(), indices.data(), GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(0); // Position
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(HonmoonVertex), (void*)0);
+
+	glBindVertexArray(0);
+
+	honmoonShader.use();
+
+	honmoonShader.setInt("gPosition", 0);
+	honmoonShader.setInt("gNormal", 1);
 #pragma endregion
 
 #pragma region Quad
@@ -202,13 +273,15 @@ int main() {
 #pragma endregion
 
 #pragma region Render
+
+#pragma region Terrain
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.005f));
+		model = glm::scale(model, glm::vec3(0.025f));
 
 		basicShader.use();
 
@@ -216,45 +289,41 @@ int main() {
 		basicShader.setMat4("projection", camera.projectionMatrix);
 		basicShader.setMat4("model", model);
 
+		basicShader.setVec3("viewPos", camera.Position);
+
+		basicShader.setVec3("dirLight.direction", lightDir);
+		basicShader.setVec3("dirLight.ambient", glm::vec3(ambient));
+		basicShader.setVec3("dirLight.diffuse", glm::vec3(diffuse));
+		basicShader.setVec3("dirLight.specular", glm::vec3(specular));
+		basicShader.setVec3("dirLight.color", glm::vec3(1.0f));
+
 		Terrain.draw(basicShader);
 #pragma endregion
 
+#pragma region Honmoon
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
-		// blit to default framebuffer. Note that this may or may not work as the internal formats of both the FBO and default framebuffer have to match.
-		// the internal formats are implementation defined. This works on all of my systems, but if it doesn't on yours you'll likely have to write to the 		
-		// depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
-		glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT,
+			0, 0, SCR_WIDTH, SCR_HEIGHT,
+			GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-#pragma region PostProcessing
-		glBindBuffer(GL_FRAMEBUFFER, 0);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		honmoonShader.use();
+
+		model = glm::mat4(1.0f);
+
+		honmoonShader.setMat4("view", camera.viewMatrix);
+		honmoonShader.setMat4("projection", camera.projectionMatrix);
+		honmoonShader.setMat4("model", model);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gPosition);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, gNormal);
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
 
-		lineShader.use();
-
-		lineShader.setInt("gPosition", 0);
-		lineShader.setInt("gNormal", 1);
-		lineShader.setInt("gAlbedoSpec", 2);
-
-		lineShader.setVec3("viewPos", camera.Position);
-
-		lineShader.setVec3("dirLight.direction", lightDir);
-		lineShader.setVec3("dirLight.ambient", glm::vec3(ambient));
-		lineShader.setVec3("dirLight.diffuse", glm::vec3(diffuse));
-		lineShader.setVec3("dirLight.specular", glm::vec3(specular));
-		lineShader.setVec3("dirLight.color", glm::vec3(1.0f));
-
-		glBindVertexArray(quadVAO);
-		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glBindVertexArray(Honmoon_VAO);
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
 #pragma endregion
 
 #pragma region GUI
