@@ -52,6 +52,8 @@ int main() {
 	framebuffer_size_callback(window, SCR_WIDTH, SCR_HEIGHT);
 
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
@@ -151,27 +153,23 @@ int main() {
 	int width = SCR_WIDTH;
 	int height = SCR_HEIGHT;
 
-	// downscaling factor: 1 = full res, 2 = half res, 4 = quarter res, etc.
-	int resolution = 1;
+	int gridSizeX = 50;
+	int gridSizeZ = 50;
+	float spacing = 1.0f;
 
-	int meshWidth = (width + resolution - 1) / resolution;  // ceil division
-	int meshHeight = (height + resolution - 1) / resolution;
-
-	// Generate vertices
-	for (int y = 0; y < height; y += resolution) {
-		for (int x = 0; x < width; x += resolution) {
-			glm::vec2 texCoord = glm::vec2(
-				static_cast<float>(x) / (width - 1),
-				static_cast<float>(y) / (height - 1)
-			);
+	for (int z = 0; z <= gridSizeZ; z++) {
+		for (int x = 0; x <= gridSizeX; x++) {
+			glm::vec2 texCoord = glm::vec2(x, z) * spacing; // world-space positions
 			Honmoon_vertices.push_back({ texCoord });
 		}
 	}
 
-	// Generate indices for triangles
-	for (int y = 0; y < meshHeight - 1; y++) {
-		for (int x = 0; x < meshWidth - 1; x++) {
-			int i0 = y * meshWidth + x;
+	int meshWidth = gridSizeX + 1;
+	int meshHeight = gridSizeZ + 1;
+
+	for (int z = 0; z < gridSizeZ; z++) {
+		for (int x = 0; x < gridSizeX; x++) {
+			int i0 = z * meshWidth + x;
 			int i1 = i0 + 1;
 			int i2 = i0 + meshWidth;
 			int i3 = i2 + 1;
@@ -186,6 +184,7 @@ int main() {
 			indices.push_back(i3);
 		}
 	}
+
 
 
 	GLuint Honmoon_VAO, Honmoon_VBO, Honmoon_EBO;
@@ -210,6 +209,8 @@ int main() {
 
 	honmoonShader.setInt("gPosition", 0);
 	honmoonShader.setInt("gNormal", 1);
+
+	float hoverHeight = 0.0f;
 #pragma endregion
 
 #pragma region Quad
@@ -275,6 +276,7 @@ int main() {
 #pragma region Render
 
 #pragma region Terrain
+		glDisable(GL_BLEND);
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -307,6 +309,7 @@ int main() {
 			0, 0, SCR_WIDTH, SCR_HEIGHT,
 			GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glEnable(GL_BLEND);
 
 		honmoonShader.use();
 
@@ -315,6 +318,7 @@ int main() {
 		honmoonShader.setMat4("view", camera.viewMatrix);
 		honmoonShader.setMat4("projection", camera.projectionMatrix);
 		honmoonShader.setMat4("model", model);
+		honmoonShader.setFloat("hoverHeight", hoverHeight);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -336,6 +340,8 @@ int main() {
 		ImGui::SliderFloat("Ambient", &ambient, 0.0f, 1.0f, "%.2f");
 		ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f, "%.2f");
 		ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f, "%.2f");
+
+		ImGui::SliderFloat("hoverHeight", &hoverHeight, 0.0f, 10.0f, "%.2f");
 
 		ImGui::End();
 
