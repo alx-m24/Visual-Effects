@@ -84,6 +84,12 @@
     <None Include="src\Shaders\Honmoon.vert">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="src\Shaders\Height.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="src\Shaders\Height.vert">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Headers\Camera.hpp">

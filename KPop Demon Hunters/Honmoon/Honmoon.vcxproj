@@ -150,6 +150,8 @@
     </None>
     <None Include="src\Shaders\Basic.frag" />
     <None Include="src\Shaders\Basic.vert" />
+    <None Include="src\Shaders\Height.frag" />
+    <None Include="src\Shaders\Height.vert" />
     <None Include="src\Shaders\Honmoon.frag" />
     <None Include="src\Shaders\Honmoon.vert" />
   </ItemGroup>

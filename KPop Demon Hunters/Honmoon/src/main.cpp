@@ -83,6 +83,7 @@ int main() {
 
 	std::string shaderPath = currentPath + "\\src\\Shaders\\";
 
+	Shader heightShader(shaderPath + "Height.vert", shaderPath + "Height.frag");
 	Shader basicShader(shaderPath + "Basic.vert", shaderPath + "Basic.frag");
 	Shader honmoonShader(shaderPath + "Honmoon.vert", shaderPath + "Honmoon.frag");
 #pragma endregion
@@ -102,47 +103,6 @@ int main() {
 	float specular = 0.5f;
 #pragma endregion
 
-#pragma region G_Buffer
-	unsigned int gBuffer;
-	glGenFramebuffers(1, &gBuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-	unsigned int gPosition, gNormal, gColor;
-	// position color buffer
-	glGenTextures(1, &gPosition);
-	glBindTexture(GL_TEXTURE_2D, gPosition);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gPosition, 0);
-	// normal color buffer
-	glGenTextures(1, &gNormal);
-	glBindTexture(GL_TEXTURE_2D, gNormal);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
-	// color + specular color buffer
-	glGenTextures(1, &gColor);
-	glBindTexture(GL_TEXTURE_2D, gColor);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gColor, 0);
-	// tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
-	unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-	glDrawBuffers(3, attachments);
-	// create and attach depth buffer (renderbuffer)
-	unsigned int rboDepth;
-	glGenRenderbuffers(1, &rboDepth);
-	glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
-	// finally check if framebuffer is complete
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "Framebuffer not complete!" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-#pragma endregion
-
 #pragma region Honmoon
 	struct HonmoonVertex {
 		glm::vec2 texCoords;
@@ -153,13 +113,20 @@ int main() {
 	int width = SCR_WIDTH;
 	int height = SCR_HEIGHT;
 
-	int gridSizeX = 50;
-	int gridSizeZ = 50;
-	float spacing = 1.0f;
+	int gridSizeX = 100;
+	int gridSizeZ = 100;
+	float spacing = 2.0f;
+
+	glm::vec3 HonmoonScale = glm::vec3(2.0f);
+	glm::vec3 HonmoonSize = glm::vec3(gridSizeX, 0.0f, gridSizeZ) * spacing * HonmoonScale;
+	glm::vec3 HonmoonPosition = glm::vec3(-HonmoonSize / 2.0f);
+	glm::vec3 HonmoonCenter = HonmoonPosition + HonmoonSize / 2.0f;
+
+	glm::vec2 Honmoon_GlobalOrigin = glm::vec2(HonmoonCenter.x, HonmoonCenter.z);
 
 	for (int z = 0; z <= gridSizeZ; z++) {
 		for (int x = 0; x <= gridSizeX; x++) {
-			glm::vec2 texCoord = glm::vec2(x, z) * spacing; // world-space positions
+			glm::vec2 texCoord = glm::vec2(x, z) / glm::vec2(gridSizeX, gridSizeZ);
 			Honmoon_vertices.push_back({ texCoord });
 		}
 	}
@@ -167,8 +134,8 @@ int main() {
 	int meshWidth = gridSizeX + 1;
 	int meshHeight = gridSizeZ + 1;
 
-	for (int z = 0; z < gridSizeZ; z++) {
-		for (int x = 0; x < gridSizeX; x++) {
+	for (int z = 0; z < gridSizeZ - 1; z++) {  // skip last row
+		for (int x = 0; x < gridSizeX - 1; x++) {  // skip last column
 			int i0 = z * meshWidth + x;
 			int i1 = i0 + 1;
 			int i2 = i0 + meshWidth;
@@ -184,7 +151,6 @@ int main() {
 			indices.push_back(i3);
 		}
 	}
-
 
 
 	GLuint Honmoon_VAO, Honmoon_VBO, Honmoon_EBO;
@@ -205,12 +171,55 @@ int main() {
 
 	glBindVertexArray(0);
 
-	honmoonShader.use();
-
-	honmoonShader.setInt("gPosition", 0);
-	honmoonShader.setInt("gNormal", 1);
-
 	float hoverHeight = 0.0f;
+	float thickness = 1.0f;
+	float ringspacing = 1.0f;
+
+	float progress = 0.0f;
+
+	honmoonShader.use();
+	honmoonShader.setInt("terrrainHeight", 0);
+#pragma endregion
+
+#pragma region Height map
+	unsigned int depthMapFBO;
+	glGenFramebuffers(1, &depthMapFBO);
+
+	// create depth texture
+	unsigned int depthMap;
+	glGenTextures(1, &depthMap);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_DEPTH_COMPONENT,
+		gridSizeX, gridSizeZ,
+		0,
+		GL_DEPTH_COMPONENT,
+		GL_FLOAT,
+		NULL
+	);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+	// attach to framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+
+	// no color buffer
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "Framebuffer not complete!" << std::endl;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #pragma endregion
 
 #pragma region Quad
@@ -275,13 +284,49 @@ int main() {
 
 #pragma region Render
 
+#pragma region Height map
+		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+		glViewport(0, 0, gridSizeX, gridSizeZ);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		
+		float near_plane = 0.1f, far_plane = 100.0f;
+		float yCamOffset = 50.0;
+
+		// Top-down view: camera above the scene, looking down the -Y axis
+		glm::vec3 camPos = HonmoonCenter + glm::vec3(0.0f, yCamOffset, 0.0f);  // move this up if scene is taller
+		glm::vec3 target = HonmoonCenter;
+		glm::vec3 upVector = glm::vec3(0.0f, 0.0f, -1.0f); // "up" is -Z when looking down Y
+
+		float orthoSizeX = HonmoonSize.x / 2.0f;
+		float orthoSizeZ = HonmoonSize.z / 2.0f;
+
+		glm::mat4 view = glm::lookAt(camPos, target, upVector);
+		glm::mat4 ortho = glm::ortho(
+			-orthoSizeX, orthoSizeX,   // left, right
+			-orthoSizeZ, orthoSizeZ,   // bottom, top
+			near_plane, far_plane
+		);
+
+		heightShader.use();
+
+		heightShader.setMat4("view", view);
+		heightShader.setMat4("projection", ortho);
+
+		glm::mat4 model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
+		model = glm::scale(model, glm::vec3(0.025f));
+		heightShader.setMat4("model", model);
+
+		Terrain.draw(heightShader);
+#pragma endregion
+
 #pragma region Terrain
-		glDisable(GL_BLEND);
-		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glm::mat4 model = glm::mat4(1.0f);
+		model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
 		model = glm::scale(model, glm::vec3(0.025f));
 
@@ -303,31 +348,31 @@ int main() {
 #pragma endregion
 
 #pragma region Honmoon
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-		glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT,
-			0, 0, SCR_WIDTH, SCR_HEIGHT,
-			GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glEnable(GL_BLEND);
-
 		honmoonShader.use();
-
-		model = glm::mat4(1.0f);
 
 		honmoonShader.setMat4("view", camera.viewMatrix);
 		honmoonShader.setMat4("projection", camera.projectionMatrix);
-		honmoonShader.setMat4("model", model);
+
 		honmoonShader.setFloat("hoverHeight", hoverHeight);
+		honmoonShader.setFloat("yCamOffset", yCamOffset);
+		honmoonShader.setVec3("origin", HonmoonPosition);
+		honmoonShader.setVec3("size", HonmoonSize);
+		honmoonShader.setFloat("far", far_plane);
+		honmoonShader.setFloat("near", near_plane);
+
+		honmoonShader.setVec2("patternOrigin", Honmoon_GlobalOrigin);
+		honmoonShader.setFloat("spacing", spacing);
+		honmoonShader.setFloat("thickness", thickness);
+		honmoonShader.setVec4("color1", glm::vec4(35, 218, 215, 255) / 255.0f); // primary color
+		honmoonShader.setVec4("color2", glm::vec4(4, 90, 107, 10) / 255.0f); // secondary color
+
+		honmoonShader.setFloat("progress", progress);
 
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, gPosition);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, gNormal);
+		glBindTexture(GL_TEXTURE_2D, depthMap);
 
 		glBindVertexArray(Honmoon_VAO);
-		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-		glBindVertexArray(0);
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
 #pragma endregion
 
 #pragma region GUI
@@ -341,7 +386,15 @@ int main() {
 		ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f, "%.2f");
 		ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f, "%.2f");
 
+		ImGui::Separator();
+
+		ImGui::DragFloat2("Center", &Honmoon_GlobalOrigin[0], 0.01f);
+
+		ImGui::Separator();
+
 		ImGui::SliderFloat("hoverHeight", &hoverHeight, 0.0f, 10.0f, "%.2f");
+		ImGui::SliderFloat("thickness", &thickness, 0.0f, 10.0f, "%.2f");
+		ImGui::SliderFloat("spacing", &spacing, 0.0f, 10.0f, "%.2f");
 
 		ImGui::End();
 

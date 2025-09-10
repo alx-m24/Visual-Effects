@@ -1,25 +1,26 @@
-#version 330 core
+#version 430 core
+
 out vec4 FragColor;
 
-in vec3 Position;
+in vec3 position;
+uniform vec2 patternOrigin;  // center of concentric pattern
+uniform float spacing;       // distance between rings
+uniform float thickness;     // how thick each ring is
+uniform vec4 color1;         // ring color
+uniform vec4 color2;         // background color
 
 void main()
 {
-    // distance from world origin in the XZ plane
-    float dist = length(Position.xz);
+    // distance from fragment to the origin
+    float dist = length(position.xz - patternOrigin);
 
-    // parameters to tweak
-    float ringSpacing = 2.0;   // how far apart rings are
-    float ringThickness = 0.2; // thickness of each band
+    
 
-    // figure out distance within its nearest ring cycle
-    float modDist = mod(dist, ringSpacing);
+    // create thin ring shape within the spacing
+    float modDist = mod(dist, spacing);
+    float ringMask = smoothstep(0.0, thickness, modDist) 
+                   * (1.0 - smoothstep(thickness, thickness * 1.2, modDist));
 
-    // condition placeholder
-    if (modDist < ringThickness) {
-        FragColor = vec4(1.0);
-    } else {
-        FragColor = vec4(0.0);
-        discard;
-    }
+    // mix background and ring color
+    FragColor = mix(color2, color1, ringMask);
 }

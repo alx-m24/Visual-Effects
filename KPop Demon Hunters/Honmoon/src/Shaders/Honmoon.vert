@@ -1,52 +1,63 @@
 #version 330 core
-layout(location = 0) in vec2 aPositionXZ;
+layout(location = 0) in vec2 aTexCoords;
 
-uniform sampler2D gPosition;
-uniform sampler2D gNormal;
 uniform mat4 view;
 uniform mat4 projection;
 
 uniform float hoverHeight;
+uniform float yCamOffset;
+uniform vec3 origin;
+uniform vec3 size;
 
-out vec3 Position;
+uniform float near;
+uniform float far;
+
+uniform sampler2D terrrainHeight;
+
+out vec3 position;
 
 void main()
 {
-    // World-space vertex
-    vec3 worldPos = vec3(aPositionXZ.x, 0.0, aPositionXZ.y);
+    vec3 worldPos = origin + size * vec3(aTexCoords.x, 0.0, aTexCoords.y);
 
-    // Project to clip space
-    vec4 clipPos = projection * view * vec4(worldPos, 1.0);
+    vec2 texSize = vec2(textureSize(terrrainHeight, 0));
+    vec2 texel = 1.0 / texSize;
 
-    // NDC coordinates
-    vec3 ndc = clipPos.xyz / clipPos.w;
-
-    // Convert NDC [-1,1] to UV [0,1] for texture lookup
-    vec2 uv = ndc.xy * 0.5 + 0.5;
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        worldPos.y = hoverHeight; // just a flat fallback
+    // Skip edges entirely
+    if(aTexCoords.x <= texel.x || aTexCoords.x >= 1.0 - texel.x ||
+       aTexCoords.y <= texel.y || aTexCoords.y >= 1.0 - texel.y)
+    {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
     }
-    uv = clamp(uv, 0.0, 1.0);
 
-    float dx = 0.01;
-    float dy = 0.01;
+    vec2 uv = aTexCoords;
+    uv.y = 1.0 - uv.y;             // flip
+    uv = clamp(uv + 0.5 * texel, texel, 1.0 - texel); // half-texel offset safely
 
-    vec3 n00 = texture(gNormal, uv + vec2(-dx,-dy)).xyz;
-    vec3 n10 = texture(gNormal, uv + vec2( dx,-dy)).xyz;
-    vec3 n01 = texture(gNormal, uv + vec2(-dx, dy)).xyz;
-    vec3 n11 = texture(gNormal, uv + vec2( dx, dy)).xyz;
-    
-    vec3 terrainNormal = normalize((n00 + n10 + n01 + n11)/4.0);
+    // Tangent spacing in world units
+    float dx = size.x / texSize.x;
+    float dz = size.z / texSize.y;
 
-    // Sample terrain position
-    vec3 terrainPos = texture(gPosition, uv).xyz;
+    float H0 = texture(terrrainHeight, uv).r * (far - near) + near;
+    float Hx = texture(terrrainHeight, uv + vec2(texel.x, 0)).r * (far - near) + near;
+    float Hz = texture(terrrainHeight, uv + vec2(0, texel.y)).r * (far - near) + near;
 
-    // Set vertex Y to terrain height + hover
-    //worldPos.y = terrainPos.y + hoverHeight;
-    vec3 offsetDir = normalize(mix(vec3(0,1,0), terrainNormal, 0.5));
-    worldPos = terrainPos + hoverHeight * offsetDir;
+    H0 = far - H0;
+    Hx = far - Hx;
+    Hz = far - Hz;
 
-    Position = worldPos;
+    // Build tangent vectors with correct scale
+    vec3 tangentX = vec3(dx, Hx - H0, 0.0);
+    vec3 tangentZ = vec3(0.0, Hz - H0, dz);
+
+    vec3 normal = normalize(cross(tangentZ, tangentX));
+
+    worldPos.y = H0;
+    worldPos += normal * hoverHeight;
+    worldPos.y -= yCamOffset;
+
+    position = worldPos;
 
     gl_Position = projection * view * vec4(worldPos, 1.0);
 }
