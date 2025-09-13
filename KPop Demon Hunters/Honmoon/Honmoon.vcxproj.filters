@@ -101,9 +101,6 @@
     <ClInclude Include="src\Headers\Model.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Headers\Vertex\Vertex.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\Headers\Textures\Textures.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

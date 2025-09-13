@@ -11,6 +11,7 @@
 #include <thread>
 #include <iostream>
 #include <filesystem>
+#include <unordered_map>
 // My headers
 #include "Headers/Shaders/Shader.hpp"
 #include "Headers/IO/Input.hpp"
@@ -20,6 +21,50 @@
 using namespace IO;
 
 namespace fs = std::filesystem;
+
+struct ModelTransforms {
+	glm::vec3 position;
+	glm::vec3 rotation;
+	float scale;
+};
+
+struct ModelInfo {
+	Model model;
+	ModelTransforms transforms;
+};
+
+using Models = std::vector<Model>;
+using ModelsProperties = std::vector<ModelTransforms>;
+using ModelIndex = std::unordered_map<std::string, size_t>;
+
+void AddModel(std::string name, std::string path, const ModelTransforms& transforms, Models& models, ModelIndex& indexes, ModelsProperties& properties) {
+	indexes[name] = models.size();
+
+	models.push_back(Model(path));
+	properties.push_back(transforms);
+}
+
+glm::mat4 applyRotationQuat(glm::mat4 modelMatrix, const glm::vec3& rotation) {
+	glm::quat q = glm::quat(glm::radians(rotation)); // expects radians
+	modelMatrix *= glm::mat4_cast(q);
+	return modelMatrix;
+}
+
+void DrawScene(Models& models, ModelIndex& indexes, ModelsProperties& properties, Shader& shader) {
+	for (const auto& model_pair : indexes) {
+		size_t index = model_pair.second;
+
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		
+		modelMatrix = glm::translate(modelMatrix, properties[index].position);
+		modelMatrix = applyRotationQuat(modelMatrix, properties[index].rotation);
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(properties[index].scale));
+
+		shader.setMat4("model", modelMatrix);
+
+		models[index].Draw(shader);
+	}
+}
 
 int main() {
 #pragma region init
@@ -91,7 +136,12 @@ int main() {
 #pragma region Models
 	std::string modelPath = currentPath + "\\src\\Models\\";
 
-	Model Terrain(modelPath + "Terrain\\Source\\c8856f5efe0e4f63898d5d5b4afafc11.fbx.fbx");
+	Models models;
+	ModelsProperties modelProperties;
+	ModelIndex indexes;
+
+	//AddModel("Terrain", modelPath + "Terrain\\Source\\c8856f5efe0e4f63898d5d5b4afafc11.fbx.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.01f }, models, indexes, modelProperties);
+	AddModel("Village", modelPath + "Village\\source\\Scena_05.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.005f }, models, indexes, modelProperties);
 #pragma endregion
 
 #pragma region Objects
@@ -115,9 +165,9 @@ int main() {
 
 	int gridSizeX = 100;
 	int gridSizeZ = 100;
-	float spacing = 2.0f;
+	float spacing = 1.0f;
 
-	glm::vec3 HonmoonScale = glm::vec3(2.0f);
+	glm::vec3 HonmoonScale = glm::vec3(0.5f);
 	glm::vec3 HonmoonSize = glm::vec3(gridSizeX, 0.0f, gridSizeZ) * spacing * HonmoonScale;
 	glm::vec3 HonmoonPosition = glm::vec3(-HonmoonSize / 2.0f);
 	glm::vec3 HonmoonCenter = HonmoonPosition + HonmoonSize / 2.0f;
@@ -312,12 +362,7 @@ int main() {
 		heightShader.setMat4("view", view);
 		heightShader.setMat4("projection", ortho);
 
-		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.025f));
-		heightShader.setMat4("model", model);
-
-		Terrain.draw(heightShader);
+		DrawScene(models, indexes, modelProperties, heightShader);
 #pragma endregion
 
 #pragma region Terrain
@@ -326,15 +371,10 @@ int main() {
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.025f));
-
 		basicShader.use();
 
 		basicShader.setMat4("view", camera.viewMatrix);
 		basicShader.setMat4("projection", camera.projectionMatrix);
-		basicShader.setMat4("model", model);
 
 		basicShader.setVec3("viewPos", camera.Position);
 
@@ -344,7 +384,7 @@ int main() {
 		basicShader.setVec3("dirLight.specular", glm::vec3(specular));
 		basicShader.setVec3("dirLight.color", glm::vec3(1.0f));
 
-		Terrain.draw(basicShader);
+		DrawScene(models, indexes, modelProperties, basicShader);
 #pragma endregion
 
 #pragma region Honmoon
@@ -395,6 +435,24 @@ int main() {
 		ImGui::SliderFloat("hoverHeight", &hoverHeight, 0.0f, 10.0f, "%.2f");
 		ImGui::SliderFloat("thickness", &thickness, 0.0f, 10.0f, "%.2f");
 		ImGui::SliderFloat("spacing", &spacing, 0.0f, 10.0f, "%.2f");
+
+		ImGui::End();
+
+		ImGui::Begin("Model Transform");
+
+		for (auto& index : indexes) {
+			ImGui::SeparatorText(index.first.c_str());
+
+			ImGui::BeginChild(index.first.c_str());
+
+			ModelTransforms& transforms = modelProperties[index.second];
+
+			ImGui::DragFloat3("Position", &transforms.position.x, 0.01f);
+			ImGui::DragFloat3("Rotation", &transforms.rotation.x, 0.1f);
+			ImGui::DragFloat("Scale", &transforms.scale, 0.001f);
+
+			ImGui::EndChild();
+		}
 
 		ImGui::End();
 

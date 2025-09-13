@@ -47,13 +47,12 @@ unsigned int loadTexture(std::string path)
 
 unsigned int TextureFromFile(const char* path, const std::string& directory)
 {
-    std::string filename = std::string(path);
-    filename = directory + '\\' + filename;
+    namespace fs = std::filesystem;
 
-    size_t pos;
-    while ((pos = filename.find(R"(..\)")) != std::string::npos) {
-        filename.erase(pos, 3); // remove the "..\"
-    }
+    fs::path texPath = fs::path(directory) / fs::path(path);
+    texPath = texPath.lexically_normal(); // resolves .. and mixed slashes
+
+    std::string filename = texPath.string();
 
     unsigned int textureID;
     glGenTextures(1, &textureID);
@@ -62,23 +61,16 @@ unsigned int TextureFromFile(const char* path, const std::string& directory)
     unsigned char* data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
     if (data)
     {
-        GLenum format = GL_RGB;
-        GLenum internalFormat = GL_SRGB;
-        if (nrComponents == 1) {
+        GLenum format;
+        if (nrComponents == 1)
             format = GL_RED;
-            internalFormat = GL_RED;
-        }
-        else if (nrComponents == 3) {
+        else if (nrComponents == 3)
             format = GL_RGB;
-            internalFormat = GL_SRGB;
-        }
-        else if (nrComponents == 4) {
+        else if (nrComponents == 4)
             format = GL_RGBA;
-            internalFormat = GL_SRGB_ALPHA;
-        }
 
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);

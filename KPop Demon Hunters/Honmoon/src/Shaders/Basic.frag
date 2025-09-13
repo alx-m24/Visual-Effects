@@ -18,9 +18,12 @@ struct DirLight {
 };
 
 struct Material {
-    sampler2D diffuse;
-    sampler2D normal;
-    sampler2D specular;
+    sampler2D texture_diffuse1;
+    sampler2D texture_normal1;
+    sampler2D texture_specular1;
+    sampler2D texture_roughness1;
+    sampler2D texture_metallic1;
+    sampler2D texture_ao1;
 };
 
 uniform DirLight dirLight;
@@ -46,19 +49,17 @@ vec3 calculateDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 color, ve
 
 void main() {
     // sample albedo
-    vec3 Albedo = texture(material.diffuse, TexCoords).rgb;
+    vec3 Albedo = texture(material.texture_diffuse1, TexCoords).rgb;
 
-    // sample normal, transform from [0,1] -> [-1,1]
-    vec3 tangentNormal = texture(material.normal, TexCoords).rgb;
-    tangentNormal = tangentNormal * 2.0 - 1.0;
-
-    // bring it into world space
-    vec3 normal = normalize(TBN * tangentNormal);
+    // Normal map (tangent space -> world space)
+    vec3 normal = texture(material.texture_normal1, TexCoords).rgb;
+    normal = normalize(normal * 2.0 - 1.0);
+    normal = normalize(TBN * normal);
 
     // view direction
     vec3 viewDir = normalize(viewPos - FragPos);
 
-    vec3 SpecularMap = texture(material.specular, TexCoords).rgb;
+    vec3 SpecularMap = texture(material.texture_specular1, TexCoords).rgb;
 
     vec3 lighting = calculateDirLight(dirLight, normal, viewDir, Albedo, SpecularMap, 33.0);
 

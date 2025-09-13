@@ -16,8 +16,7 @@ uniform sampler2D terrrainHeight;
 
 out vec3 position;
 
-void main()
-{
+vec3 getWorldPosition(){
     vec3 worldPos = origin + size * vec3(aTexCoords.x, 0.0, aTexCoords.y);
 
     vec2 texSize = vec2(textureSize(terrrainHeight, 0));
@@ -28,7 +27,7 @@ void main()
        aTexCoords.y <= texel.y || aTexCoords.y >= 1.0 - texel.y)
     {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-        return;
+        return -vec3(1.0);
     }
 
     vec2 uv = aTexCoords;
@@ -57,7 +56,14 @@ void main()
     worldPos += normal * hoverHeight;
     worldPos.y -= yCamOffset;
 
-    position = worldPos;
+    return worldPos;
+}
 
-    gl_Position = projection * view * vec4(worldPos, 1.0);
+void main()
+{
+    position = getWorldPosition();
+
+    if (position == vec3(-1.0)) return;
+
+    gl_Position = projection * view * vec4(position, 1.0);
 }
