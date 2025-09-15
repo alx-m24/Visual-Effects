@@ -141,7 +141,7 @@ int main() {
 	ModelIndex indexes;
 
 	//AddModel("Terrain", modelPath + "Terrain\\Source\\c8856f5efe0e4f63898d5d5b4afafc11.fbx.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.01f }, models, indexes, modelProperties);
-	AddModel("Village", modelPath + "Village\\source\\Scena_05.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.005f }, models, indexes, modelProperties);
+	AddModel("Village", modelPath + "Village\\source\\Scena_05.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.01f }, models, indexes, modelProperties);
 #pragma endregion
 
 #pragma region Objects
@@ -167,7 +167,7 @@ int main() {
 	int gridSizeZ = 100;
 	float spacing = 1.0f;
 
-	glm::vec3 HonmoonScale = glm::vec3(0.5f);
+	glm::vec3 HonmoonScale = glm::vec3(1.0f);
 	glm::vec3 HonmoonSize = glm::vec3(gridSizeX, 0.0f, gridSizeZ) * spacing * HonmoonScale;
 	glm::vec3 HonmoonPosition = glm::vec3(-HonmoonSize / 2.0f);
 	glm::vec3 HonmoonCenter = HonmoonPosition + HonmoonSize / 2.0f;
@@ -221,14 +221,26 @@ int main() {
 
 	glBindVertexArray(0);
 
-	float hoverHeight = 0.0f;
-	float thickness = 1.0f;
-	float ringspacing = 1.0f;
+	float hoverHeight = 5.0f;
+	float Heightoffset = 100.0f;
+	float thickness = 0.2f;
+	float ringspacing = 1.5f;
+	float edgeSoftness = 0.1f;
 
 	float progress = 0.0f;
 
+	float twinklePeriod = 0.4f;
+	float wave_period = 0.243f;
+	float wavyness = 0.5f;
+
+	float golden_period = 0.3f;
+	float golden_progress = 0.0f;
+
 	honmoonShader.use();
 	honmoonShader.setInt("terrrainHeight", 0);
+
+	bool propagate = false;
+	float maxDistance = 100.0f;
 #pragma endregion
 
 #pragma region Height map
@@ -339,8 +351,8 @@ int main() {
 		glViewport(0, 0, gridSizeX, gridSizeZ);
 		glClear(GL_DEPTH_BUFFER_BIT);
 		
-		float near_plane = 0.1f, far_plane = 100.0f;
-		float yCamOffset = 50.0;
+		float near_plane = 0.1f, far_plane = 200.0f;
+		float yCamOffset = 100.0;
 
 		// Top-down view: camera above the scene, looking down the -Y axis
 		glm::vec3 camPos = HonmoonCenter + glm::vec3(0.0f, yCamOffset, 0.0f);  // move this up if scene is taller
@@ -394,6 +406,7 @@ int main() {
 		honmoonShader.setMat4("projection", camera.projectionMatrix);
 
 		honmoonShader.setFloat("hoverHeight", hoverHeight);
+		honmoonShader.setFloat("minHeight", Heightoffset);
 		honmoonShader.setFloat("yCamOffset", yCamOffset);
 		honmoonShader.setVec3("origin", HonmoonPosition);
 		honmoonShader.setVec3("size", HonmoonSize);
@@ -403,16 +416,42 @@ int main() {
 		honmoonShader.setVec2("patternOrigin", Honmoon_GlobalOrigin);
 		honmoonShader.setFloat("spacing", spacing);
 		honmoonShader.setFloat("thickness", thickness);
-		honmoonShader.setVec4("color1", glm::vec4(35, 218, 215, 255) / 255.0f); // primary color
-		honmoonShader.setVec4("color2", glm::vec4(4, 90, 107, 10) / 255.0f); // secondary color
+		honmoonShader.setFloat("edgeSoftness", edgeSoftness);
+		honmoonShader.setVec4("color1", glm::vec4(0, 180, 220, 255) / 255.0f); // primary color
+		honmoonShader.setVec4("color2", glm::vec4(4, 90, 107, 20) / 255.0f); // secondary color
+		honmoonShader.setVec4("golden1", glm::vec4(255, 215, 0, 255) / 255.0f); // primary color
+		honmoonShader.setVec4("golden2", glm::vec4(218, 165, 32, 20) / 255.0f); // secondary color
 
-		honmoonShader.setFloat("progress", progress);
+		honmoonShader.setFloat("twinkle_period", twinklePeriod);
+		honmoonShader.setFloat("wave_period", wave_period);
+		honmoonShader.setFloat("wavy_ness", wavyness);
+
+		honmoonShader.setFloat("golden_period", golden_period);
+		honmoonShader.setFloat("golden_progress", golden_progress);
+
+		// increment or decrement depending on propagate flag
+		progress += (propagate ? 1.0f : -1.0f) * dt * 0.4f;
+
+		// clamp between 0 and 1
+		progress = std::clamp(progress, 0.0f, 1.0f);
+
+		// ease with smoothstep-like curve
+		float eased = progress * progress * (3.0f - 2.0f * progress);
+
+		// pass to shader in world units
+		honmoonShader.setFloat("progress", eased* maxDistance);
+
+		honmoonShader.setFloat("time", myTime);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, depthMap);
 
+		glDepthMask(GL_FALSE);
+
 		glBindVertexArray(Honmoon_VAO);
 		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
+
+		glDepthMask(GL_TRUE);
 #pragma endregion
 
 #pragma region GUI
@@ -432,9 +471,21 @@ int main() {
 
 		ImGui::Separator();
 
-		ImGui::SliderFloat("hoverHeight", &hoverHeight, 0.0f, 10.0f, "%.2f");
-		ImGui::SliderFloat("thickness", &thickness, 0.0f, 10.0f, "%.2f");
-		ImGui::SliderFloat("spacing", &spacing, 0.0f, 10.0f, "%.2f");
+		ImGui::DragFloat("hoverHeight", &hoverHeight, 0.01f, 0.0f);
+		ImGui::DragFloat("Heightoffset", &Heightoffset, 0.01f, 0.0f);
+		ImGui::DragFloat("thickness", &thickness, 0.001f, 0.0f, 1.0f);
+		ImGui::DragFloat("edgeSoftness", &edgeSoftness, 0.001f, 0.0f, 1.0f);
+		ImGui::DragFloat("spacing", &spacing, 0.001f, 0.0f);
+		ImGui::DragFloat("twinkle_period", &twinklePeriod, 0.001f, 0.0f);
+		ImGui::DragFloat("wave_period", &wave_period, 0.001f, 0.0f);
+		ImGui::DragFloat("wavyness", &wavyness, 0.001f, 0.0f);
+		ImGui::DragFloat("progress", &progress, 0.1f, 0.0f);
+
+		ImGui::Checkbox("propagate", &propagate);
+
+		ImGui::Separator();
+		ImGui::DragFloat("Golden_period", & golden_period, 0.001f, 0.0f);
+		ImGui::DragFloat("Golden_progress", & golden_progress, 0.001f, 0.0f, 1.0f);
 
 		ImGui::End();
 
