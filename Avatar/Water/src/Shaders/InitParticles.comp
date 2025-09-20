@@ -1,0 +1,83 @@
+#version 430 core
+
+layout(local_size_x = 256) in; // adjust based on GPU
+
+struct Particle {
+    vec4 position;      // xyz = pos, w = mass
+    vec4 velocity;
+    vec4 acceleration;
+    vec4 jerk;
+    vec4 predictedPosition;
+    vec4 predictedVelocity;
+    vec4 newAcceleration;
+    vec4 newJerk;
+};
+
+layout(std430, binding = 0) buffer Particles {
+    Particle particles[];
+};
+
+uniform int ParticleCount;
+uniform float maxMass;
+uniform float spaceRange;
+uniform float maxVel;
+uniform float angularSpeed;
+
+uniform float Seed;
+
+// Robust 1D float hash
+float Hash(float n) {
+    n = fract(n * 0.1031);
+    n *= n + 33.33;
+    n *= n + n;
+    return fract(n);
+}
+
+// Random float in [minVal, maxVal] using a seed
+float RandomFloat(float seed, float minVal, float maxVal) {
+    return mix(minVal, maxVal, Hash(seed));
+}
+
+// Random vec3 in cube [-range, +range]
+vec3 RandomVec3(float seed, float range) {
+    return vec3(
+        RandomFloat(seed + 1.0, -range, range),
+        RandomFloat(seed + 2.0, -range, range),
+        RandomFloat(seed + 3.0, -range, range)
+    );
+}
+
+void main(){
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= ParticleCount) return;
+
+    float baseSeed = float(Seed) + float(i) * 437.0;
+
+    Particle p;
+    
+    //float radius = RandomFloat(baseSeed, 0.1f, maxMass);
+    vec3 pos = RandomVec3(baseSeed, spaceRange);
+    
+    vec3 velocity = RandomVec3(baseSeed + 54.3, maxVel);
+
+    if (angularSpeed != 0.0f) {
+        float r = length(pos.xz);   // radial distance in disc plane
+        float omega = radians(angularSpeed); 
+        float v = omega * r; 
+    
+        vec3 radial = normalize(vec3(pos.x, 0.0, pos.z));  // flatten to plane
+        vec3 tangent = normalize(cross(vec3(0.0, 1.0, 0.0), radial));
+    
+        velocity += tangent * v;
+    }
+
+    float r = length(pos.xz);
+    float bias = 1.0 - clamp(r / spaceRange, 0.0, 1.0); // 1 near center, 0 at edge
+    float radius = RandomFloat(baseSeed, 0.1f, maxMass) * (0.5 + bias); // weight toward center
+
+    p.position = vec4(pos, radius);
+    p.velocity = vec4(velocity, 12.0);
+    p.acceleration = vec4(0.0);
+
+    particles[i] = p;
+}
