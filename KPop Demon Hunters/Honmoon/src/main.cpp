@@ -240,7 +240,7 @@ int main() {
 	honmoonShader.setInt("terrrainHeight", 0);
 
 	bool propagate = false;
-	float maxDistance = 100.0f;
+	float maxDistance = glm::distance(HonmoonPosition, HonmoonCenter);
 #pragma endregion
 
 #pragma region Height map
@@ -447,10 +447,12 @@ int main() {
 		glBindTexture(GL_TEXTURE_2D, depthMap);
 
 		glDepthMask(GL_FALSE);
+		glDisable(GL_CULL_FACE);
 
 		glBindVertexArray(Honmoon_VAO);
 		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
 
+		glEnable(GL_CULL_FACE);
 		glDepthMask(GL_TRUE);
 #pragma endregion
 

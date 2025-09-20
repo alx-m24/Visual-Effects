@@ -8,7 +8,7 @@ uniform vec2  patternOrigin;   // center of concentric pattern
 uniform float spacing;         // distance between rings
 uniform float thickness;       // thickness of each ring
 uniform float edgeSoftness;    // how smooth the edges are
-uniform float time;            // animate offset (optional)
+uniform float time;            // animate offset
 
 uniform float progress; // distance to start fade-out
 
@@ -78,11 +78,10 @@ void main() {
     // base distance from fragment to origin
     float dist = length(position.xz - patternOrigin);
 
-    // animate the noise field (optional)
     float n = snoise(position.xz * wave_period);
     
     // use noise to perturb the distance field itself
-    dist += n * wavy_ness;   // tweak 0.3 for how wavy you want it
+    dist += n * wavy_ness;
 
     // fractional position within ring cycle
     float modDist = mod(dist, spacing);
