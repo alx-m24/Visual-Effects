@@ -12,6 +12,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include <vector>
 
 namespace fs = std::filesystem;
 

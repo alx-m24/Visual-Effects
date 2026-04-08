@@ -2,10 +2,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 // Imgui
-#include "Headers/imgui/imgui.h"
-#include "Headers/imgui/imgui_impl_glfw.h"
-#include "Headers/imgui/imgui_impl_opengl3.h"
-#include "Headers/imgui/implot.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "implot.h"
 // Other
 #include <array>
 #include <thread>
@@ -134,14 +133,11 @@ int main() {
 #pragma endregion
 
 #pragma region Models
-	std::string modelPath = currentPath + "\\src\\Models\\";
-
+	std::filesystem::path modelPath = std::filesystem::path("src/Models");
 	Models models;
 	ModelsProperties modelProperties;
 	ModelIndex indexes;
-
-	//AddModel("Terrain", modelPath + "Terrain\\Source\\c8856f5efe0e4f63898d5d5b4afafc11.fbx.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.01f }, models, indexes, modelProperties);
-	AddModel("Village", modelPath + "Village\\source\\Scena_05.fbx", { glm::vec3(0.0f), glm::vec3(0.0f), 0.01f }, models, indexes, modelProperties);
+	AddModel("Terrain", (modelPath / "Terrain" / "source" / "c8856f5efe0e4f63898d5d5b4afafc11.fbx.fbx").generic_string(), { glm::vec3(0.0f), glm::vec3(0.0f), 0.01f }, models, indexes, modelProperties);
 #pragma endregion
 
 #pragma region Objects
